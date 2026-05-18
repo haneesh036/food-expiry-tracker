@@ -153,18 +153,37 @@ const Scanner = () => {
       }
       
       if (bestDateStr) {
-        // Clean up basic string for parser
-        let parsed = new Date(bestDateStr.replace(/[\/\.]/g, '-'));
-        
-        // Handle MM/YY edge cases simply
-        if (bestDateStr.match(/^\d{1,2}[\/\-]\d{2}$/)) {
-          const parts = bestDateStr.split(/[\/\-]/);
-          parsed = new Date(`20${parts[1]}-${parts[0]}-01`);
+        let parsed = new Date();
+        const cleanStr = bestDateStr.replace(/[\/\.]/g, '-');
+        const parts = cleanStr.split('-');
+
+        if (parts.length === 3) {
+          let d = parts[0];
+          let m = parts[1];
+          let y = parts[2];
+          
+          if (d.length === 4) {
+            // YYYY-MM-DD
+            parsed = new Date(`${d}-${m}-${y}`);
+          } else {
+            // DD-MM-YY or DD-MM-YYYY
+            if (y.length === 2) y = `20${y}`;
+            parsed = new Date(`${y}-${m}-${d}`);
+          }
+        } else if (parts.length === 2) {
+          // MM-YY or MM-YYYY
+          let m = parts[0];
+          let y = parts[1];
+          if (y.length === 2) y = `20${y}`;
+          parsed = new Date(`${y}-${m}-01`);
+        } else {
+           parsed = new Date(cleanStr);
         }
 
         if (!isNaN(parsed) && parsed.getFullYear() > 2000) {
-          setFormData(prev => ({ ...prev, expiry_date: parsed.toISOString().split('T')[0] }));
-          alert(`Detected date: ${bestDateStr}`);
+          const isoDate = parsed.toISOString().split('T')[0];
+          setFormData(prev => ({ ...prev, expiry_date: isoDate }));
+          alert(`Detected date: ${isoDate} (from "${bestDateStr}")`);
         } else {
           alert(`Found "${bestDateStr}" but could not parse it as a valid date. Please verify manually.`);
         }
