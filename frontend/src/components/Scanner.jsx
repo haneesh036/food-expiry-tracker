@@ -14,6 +14,7 @@ const Scanner = () => {
   });
   const [ocrLoading, setOcrLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [cameraError, setCameraError] = useState(false);
   const videoRef = useRef(null);
   const codeReader = useRef(new BrowserMultiFormatReader());
   const navigate = useNavigate();
@@ -26,11 +27,16 @@ const Scanner = () => {
 
   const startScanning = async () => {
     setScanning(true);
+    setCameraError(false);
     try {
       if (videoRef.current) {
         // Fetch devices manually
         const devices = await BrowserMultiFormatReader.listVideoInputDevices();
-        if (devices.length === 0) throw new Error('No camera devices found');
+        if (devices.length === 0) {
+          setCameraError(true);
+          setScanning(false);
+          return;
+        }
         
         // Try to find a back/environment camera
         const backCamera = devices.find(d => 
@@ -51,8 +57,23 @@ const Scanner = () => {
       }
     } catch (err) {
       console.error(err);
-      alert('Camera access denied or no camera found.');
+      setCameraError(true);
       setScanning(false);
+    }
+  };
+
+  const handleBarcodeImage = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    try {
+      const url = URL.createObjectURL(file);
+      const result = await codeReader.current.decodeFromImageUrl(url);
+      if (result) {
+        handleBarcodeScanned(result.getText());
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Could not detect barcode from image. Please try again or enter manually.');
     }
   };
 
@@ -90,14 +111,44 @@ const Scanner = () => {
     setOcrLoading(true);
     try {
       const result = await Tesseract.recognize(file, 'eng');
-      const text = result.data.text;
+      const text = result.data.text.toLowerCase();
+      const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
       
-      // More forgiving regex for dates (DD/MM/YYYY, MM/YY, YYYY-MM-DD, MMM YYYY)
-      const dateRegex = /\b(\d{1,2}[\/\-\.]\d{1,2}([\/\-\.]\d{2,4})?|\d{4}[\/\-\.]\d{1,2}[\/\-\.]\d{1,2}|[A-Za-z]{3}\s\d{2,4})\b/g;
-      const dates = text.match(dateRegex);
+      let bestDateStr = null;
+      const keywords = ['use by', 'bb', 'best before', 'exp', 'expiry'];
+      const dateRegex = /\b(\d{1,2}[\/\-\.]\d{1,2}([\/\-\.]\d{2,4})?|\d{4}[\/\-\.]\d{1,2}[\/\-\.]\d{1,2}|[a-z]{3}\s\d{2,4})\b/i;
+
+      // 1. Try to find a line with a keyword AND a date
+      for (const line of lines) {
+        if (keywords.some(kw => line.includes(kw))) {
+          const match = line.match(dateRegex);
+          if (match) {
+            bestDateStr = match[0];
+            break;
+          }
+        }
+      }
+
+      // 2. If not found, look for keyword, then check next line for date
+      if (!bestDateStr) {
+        for (let i = 0; i < lines.length; i++) {
+          if (keywords.some(kw => lines[i].includes(kw))) {
+            const match = lines[i+1]?.match(dateRegex);
+            if (match) {
+              bestDateStr = match[0];
+              break;
+            }
+          }
+        }
+      }
+
+      // 3. Fallback: just find any date in the whole text
+      if (!bestDateStr) {
+        const match = text.match(dateRegex);
+        if (match) bestDateStr = match[0];
+      }
       
-      if (dates && dates.length > 0) {
-        let bestDateStr = dates[0];
+      if (bestDateStr) {
         // Clean up basic string for parser
         let parsed = new Date(bestDateStr.replace(/[\/\.]/g, '-'));
         
@@ -111,10 +162,10 @@ const Scanner = () => {
           setFormData(prev => ({ ...prev, expiry_date: parsed.toISOString().split('T')[0] }));
           alert(`Detected date: ${bestDateStr}`);
         } else {
-          alert(`Found "${bestDateStr}" but could not parse. Please verify manually.`);
+          alert(`Found "${bestDateStr}" but could not parse it as a valid date. Please verify manually.`);
         }
       } else {
-        alert('No date detected clearly. Please enter manually.');
+        alert('No expiry date detected clearly. Please enter manually.');
       }
     } catch (err) {
       console.error(err);
@@ -175,10 +226,22 @@ const Scanner = () => {
         {activeTab === 'barcode' && (
           <div className="flex flex-col items-center justify-center p-6 space-y-6">
             {!scanning ? (
-              <button onClick={startScanning} className="btn btn-primary flex flex-col items-center justify-center h-48 w-48 rounded-3xl gap-4">
-                <Camera className="w-12 h-12" />
-                <span className="text-lg">Start Scanner</span>
-              </button>
+              <div className="flex flex-col items-center gap-4">
+                <button onClick={startScanning} className="btn btn-primary flex flex-col items-center justify-center h-48 w-48 rounded-3xl gap-4">
+                  <Camera className="w-12 h-12" />
+                  <span className="text-lg">Start Scanner</span>
+                </button>
+                {cameraError && (
+                  <div className="text-center mt-2">
+                    <p className="text-red-500 text-sm mb-3">Camera not available or blocked.</p>
+                    <label className="btn btn-outline cursor-pointer px-6">
+                      <ImageIcon className="w-4 h-4" />
+                      Take Photo / Upload Barcode
+                      <input type="file" accept="image/*" capture="environment" className="hidden" onChange={handleBarcodeImage} />
+                    </label>
+                  </div>
+                )}
+              </div>
             ) : (
               <div className="relative w-full max-w-sm rounded-2xl overflow-hidden bg-black shadow-lg">
                 <video ref={videoRef} className="w-full h-auto"></video>
