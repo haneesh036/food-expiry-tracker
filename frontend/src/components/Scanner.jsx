@@ -30,37 +30,35 @@ const Scanner = () => {
     setCameraError(false);
     try {
       if (videoRef.current) {
-        // Fetch devices manually
-        const devices = await BrowserMultiFormatReader.listVideoInputDevices();
-        if (devices.length === 0) {
-          setCameraError(true);
-          setScanning(false);
-          return;
+        // 1. Explicitly request camera permissions (triggers browser popup)
+        let stream;
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+        } catch (e) {
+          // Fallback to front camera if environment fails
+          stream = await navigator.mediaDevices.getUserMedia({ video: true });
         }
         
-        // Try to find a back/environment camera
-        const backCamera = devices.find(d => 
-          d.label.toLowerCase().includes('back') || 
-          d.label.toLowerCase().includes('environment') || 
-          d.label.toLowerCase().includes('rear')
-        );
+        // 2. Attach stream to video element
+        videoRef.current.srcObject = stream;
         
-        // Use back camera if found, else first available
-        const selectedDeviceId = backCamera ? backCamera.deviceId : devices[0].deviceId;
-        
-        codeReader.current.decodeFromVideoDevice(selectedDeviceId, videoRef.current, (result, err) => {
+        // Wait for video to start playing
+        await new Promise((resolve) => {
+          videoRef.current.onloadedmetadata = () => {
+            videoRef.current.play().then(resolve);
+          };
+        });
+
+        // 3. Decode from the playing video element
+        codeReader.current.decodeFromVideoElement(videoRef.current, (result, err) => {
           if (result) {
             handleBarcodeScanned(result.getText());
             stopScanning();
           }
-        }).catch(err => {
-          console.error("Camera start failed:", err);
-          setCameraError(true);
-          setScanning(false);
         });
       }
     } catch (err) {
-      console.error(err);
+      console.error("Camera access failed entirely:", err);
       setCameraError(true);
       setScanning(false);
     }
@@ -82,6 +80,10 @@ const Scanner = () => {
   };
 
   const stopScanning = () => {
+    if (videoRef.current && videoRef.current.srcObject) {
+      videoRef.current.srcObject.getTracks().forEach(track => track.stop());
+      videoRef.current.srcObject = null;
+    }
     codeReader.current.reset();
     setScanning(false);
   };
@@ -120,7 +122,7 @@ const Scanner = () => {
       
       let bestDateStr = null;
       const keywords = ['use by', 'bb', 'best before', 'exp', 'expiry'];
-      const dateRegex = /\b(\d{1,2}[\/\-\.]\d{1,2}([\/\-\.]\d{2,4})?|\d{4}[\/\-\.]\d{1,2}[\/\-\.]\d{1,2}|[a-z]{3}\s\d{2,4})\b/i;
+      const dateRegex = /\b(\d{1,2}[\/\-\.][a-z]{3}[\/\-\.]\d{2,4}|\d{1,2}[\/\-\.]\d{1,2}([\/\-\.]\d{2,4})?|\d{4}[\/\-\.]\d{1,2}[\/\-\.]\d{1,2}|[a-z]{3}\s\d{2,4})\b/i;
 
       // 1. Try to find a line with a keyword AND a date
       for (const line of lines) {
@@ -156,11 +158,14 @@ const Scanner = () => {
         let parsed = new Date();
         const cleanStr = bestDateStr.replace(/[\/\.]/g, '-');
         const parts = cleanStr.split('-');
+        const monthMap = { jan:1, feb:2, mar:3, apr:4, may:5, jun:6, jul:7, aug:8, sep:9, oct:10, nov:11, dec:12 };
 
         if (parts.length === 3) {
           let d = parts[0];
-          let m = parts[1];
+          let m = parts[1].toLowerCase();
           let y = parts[2];
+          
+          if (monthMap[m]) m = monthMap[m];
           
           if (d.length === 4) {
             // YYYY-MM-DD
@@ -172,8 +177,9 @@ const Scanner = () => {
           }
         } else if (parts.length === 2) {
           // MM-YY or MM-YYYY
-          let m = parts[0];
+          let m = parts[0].toLowerCase();
           let y = parts[1];
+          if (monthMap[m]) m = monthMap[m];
           if (y.length === 2) y = `20${y}`;
           parsed = new Date(`${y}-${m}-01`);
         } else {
