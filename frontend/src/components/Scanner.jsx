@@ -29,28 +29,38 @@ const Scanner = () => {
     setScanning(true);
     setCameraError(false);
     try {
-      if (videoRef.current) {
-        // 1. Explicitly request camera permissions (triggers browser popup)
+      const video = videoRef.current;
+      if (video) {
+        // 1. Request camera with IDEAL constraints so it doesn't throw on missing rear camera
         let stream;
         try {
-          stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+          stream = await navigator.mediaDevices.getUserMedia({ 
+            video: { facingMode: { ideal: 'environment' } },
+            audio: false 
+          });
         } catch (e) {
-          // Fallback to front camera if environment fails
-          stream = await navigator.mediaDevices.getUserMedia({ video: true });
+          // Fallback to any camera if ideal constraints completely fail
+          stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
         }
         
-        // 2. Attach stream to video element
-        videoRef.current.srcObject = stream;
+        // 2. Attach stream to video element robustly
+        video.srcObject = stream;
+        video.setAttribute('playsinline', 'true');
+        video.setAttribute('muted', 'true');
+        video.muted = true;
         
-        // Wait for video to start playing
-        await new Promise((resolve) => {
-          videoRef.current.onloadedmetadata = () => {
-            videoRef.current.play().then(resolve);
+        // Wait for video metadata to load before playing
+        await new Promise((resolve, reject) => {
+          video.onloadedmetadata = () => {
+            video.play().then(resolve).catch(reject);
           };
+          video.onerror = reject;
+          // Fallback timeout
+          setTimeout(resolve, 2000);
         });
 
         // 3. Decode from the playing video element
-        codeReader.current.decodeFromVideoElement(videoRef.current, (result, err) => {
+        codeReader.current.decodeFromVideoElement(video, (result, err) => {
           if (result) {
             handleBarcodeScanned(result.getText());
             stopScanning();
