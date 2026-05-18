@@ -86,7 +86,7 @@ const Dashboard = () => {
                       </div>
                       <div>
                         <p className="font-medium text-slate-800">{item.product_name}</p>
-                        <p className="text-xs text-slate-500">Added {moment(item.created_at).fromNow()}</p>
+                        <p className="text-xs text-slate-500">Added {moment.utc(item.created_at).local().fromNow()}</p>
                       </div>
                     </div>
                     <div className="text-right">
