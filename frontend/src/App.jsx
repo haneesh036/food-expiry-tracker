@@ -27,7 +27,7 @@ const AppLayout = ({ children }) => {
 
   return (
     <div className="min-h-screen flex flex-col bg-[var(--color-bg-neutral)] overflow-hidden">
-      <Navbar toggleSidebar={() => setIsSidebarOpen(true)} />
+      <Navbar toggleSidebar={() => setIsSidebarOpen(prev => !prev)} />
       
       <div className="flex-1 flex overflow-hidden">
         <Sidebar 

@@ -28,20 +28,30 @@ const Scanner = () => {
     setScanning(true);
     try {
       if (videoRef.current) {
-        codeReader.current.decodeFromConstraints(
-          { audio: false, video: { facingMode: 'environment' } }, 
-          videoRef.current, 
-          (result, err) => {
-            if (result) {
-              handleBarcodeScanned(result.getText());
-              stopScanning();
-            }
-          }
+        // Fetch devices manually
+        const devices = await BrowserMultiFormatReader.listVideoInputDevices();
+        if (devices.length === 0) throw new Error('No camera devices found');
+        
+        // Try to find a back/environment camera
+        const backCamera = devices.find(d => 
+          d.label.toLowerCase().includes('back') || 
+          d.label.toLowerCase().includes('environment') || 
+          d.label.toLowerCase().includes('rear')
         );
+        
+        // Use back camera if found, else first available
+        const selectedDeviceId = backCamera ? backCamera.deviceId : devices[0].deviceId;
+        
+        codeReader.current.decodeFromVideoDevice(selectedDeviceId, videoRef.current, (result, err) => {
+          if (result) {
+            handleBarcodeScanned(result.getText());
+            stopScanning();
+          }
+        });
       }
     } catch (err) {
       console.error(err);
-      alert('Camera access denied or error occurred.');
+      alert('Camera access denied or no camera found.');
       setScanning(false);
     }
   };
