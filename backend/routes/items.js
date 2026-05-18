@@ -40,6 +40,21 @@ router.delete('/:id', (req, res) => {
   });
 });
 
+// Update item details
+router.put('/:id', (req, res) => {
+  const { id } = req.params;
+  const { product_name, brand, category, quantity, expiry_date, storage_location, notes } = req.body;
+  
+  db.run(
+    `UPDATE Food_Items SET product_name = ?, brand = ?, category = ?, quantity = ?, expiry_date = ?, storage_location = ?, notes = ? WHERE id = ?`,
+    [product_name, brand, category, quantity, expiry_date, storage_location, notes, id],
+    function(err) {
+      if (err) return res.status(500).json({ message: 'Database error', error: err.message });
+      res.json({ message: 'Item updated successfully' });
+    }
+  );
+});
+
 // Update item status
 router.put('/:id/status', (req, res) => {
   const { id } = req.params;

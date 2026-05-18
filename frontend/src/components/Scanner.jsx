@@ -27,15 +27,17 @@ const Scanner = () => {
   const startScanning = async () => {
     setScanning(true);
     try {
-      const videoInputDevices = await BrowserMultiFormatReader.listVideoInputDevices();
-      const selectedDeviceId = videoInputDevices[0]?.deviceId;
-      if (selectedDeviceId && videoRef.current) {
-        codeReader.current.decodeFromVideoDevice(selectedDeviceId, videoRef.current, (result, err) => {
-          if (result) {
-            handleBarcodeScanned(result.getText());
-            stopScanning();
+      if (videoRef.current) {
+        codeReader.current.decodeFromConstraints(
+          { audio: false, video: { facingMode: 'environment' } }, 
+          videoRef.current, 
+          (result, err) => {
+            if (result) {
+              handleBarcodeScanned(result.getText());
+              stopScanning();
+            }
           }
-        });
+        );
       }
     } catch (err) {
       console.error(err);
@@ -80,27 +82,33 @@ const Scanner = () => {
       const result = await Tesseract.recognize(file, 'eng');
       const text = result.data.text;
       
-      // Basic regex for dates (DD/MM/YYYY, MM/YY, YYYY-MM-DD)
-      const dateRegex = /\b(\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{2,4}|\d{4}[\/\-\.]\d{1,2}[\/\-\.]\d{1,2})\b/g;
+      // More forgiving regex for dates (DD/MM/YYYY, MM/YY, YYYY-MM-DD, MMM YYYY)
+      const dateRegex = /\b(\d{1,2}[\/\-\.]\d{1,2}([\/\-\.]\d{2,4})?|\d{4}[\/\-\.]\d{1,2}[\/\-\.]\d{1,2}|[A-Za-z]{3}\s\d{2,4})\b/g;
       const dates = text.match(dateRegex);
       
       if (dates && dates.length > 0) {
-        // Need to convert date to YYYY-MM-DD for input type="date"
-        // Simplistic assumption for prototype: Just put raw extracted string or try parsing
-        try {
-           const parsed = new Date(dates[0].replace(/[\/\.]/g, '-'));
-           if (!isNaN(parsed)) {
-             setFormData(prev => ({ ...prev, expiry_date: parsed.toISOString().split('T')[0] }));
-           }
-        } catch {
-          // Ignore
+        let bestDateStr = dates[0];
+        // Clean up basic string for parser
+        let parsed = new Date(bestDateStr.replace(/[\/\.]/g, '-'));
+        
+        // Handle MM/YY edge cases simply
+        if (bestDateStr.match(/^\d{1,2}[\/\-]\d{2}$/)) {
+          const parts = bestDateStr.split(/[\/\-]/);
+          parsed = new Date(`20${parts[1]}-${parts[0]}-01`);
         }
-        alert(`Detected date: ${dates[0]}`);
+
+        if (!isNaN(parsed) && parsed.getFullYear() > 2000) {
+          setFormData(prev => ({ ...prev, expiry_date: parsed.toISOString().split('T')[0] }));
+          alert(`Detected date: ${bestDateStr}`);
+        } else {
+          alert(`Found "${bestDateStr}" but could not parse. Please verify manually.`);
+        }
       } else {
         alert('No date detected clearly. Please enter manually.');
       }
     } catch (err) {
       console.error(err);
+      alert('Failed to process image');
     } finally {
       setOcrLoading(false);
       setActiveTab('manual');

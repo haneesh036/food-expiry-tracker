@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import moment from 'moment';
-import { Search, Filter, Trash2, Plus } from 'lucide-react';
+import { Search, Filter, Trash2, Plus, Edit2, X } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { API_URL } from '../config';
 
@@ -10,6 +10,7 @@ const Inventory = () => {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterCategory, setFilterCategory] = useState('All');
+  const [editingItem, setEditingItem] = useState(null);
 
   useEffect(() => {
     fetchItems();
@@ -43,6 +44,18 @@ const Inventory = () => {
       fetchItems();
     } catch (err) {
       console.error(err);
+    }
+  };
+
+  const handleUpdateItem = async (e) => {
+    e.preventDefault();
+    try {
+      await axios.put(`${API_URL}/api/items/${editingItem.id}`, editingItem);
+      setEditingItem(null);
+      fetchItems();
+    } catch (err) {
+      console.error(err);
+      alert('Failed to update item');
     }
   };
 
@@ -156,8 +169,18 @@ const Inventory = () => {
                        <button 
                         onClick={() => handleDelete(item.id)}
                         className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                        title="Delete"
                       >
                         <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
+                    {item.status === 'active' && (
+                      <button 
+                        onClick={() => setEditingItem({...item})}
+                        className="p-2 text-slate-400 hover:text-blue-500 hover:bg-blue-50 rounded-lg transition-colors ml-2"
+                        title="Edit"
+                      >
+                        <Edit2 className="w-4 h-4" />
                       </button>
                     )}
                   </td>
@@ -167,6 +190,54 @@ const Inventory = () => {
           </tbody>
         </table>
       </div>
+
+      {editingItem && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl shadow-xl w-full max-w-lg overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
+              <h3 className="font-bold text-lg text-slate-800">Edit Item</h3>
+              <button onClick={() => setEditingItem(null)} className="text-slate-400 hover:text-slate-600 p-1">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <form onSubmit={handleUpdateItem} className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Product Name</label>
+                <input type="text" className="input-field py-2" value={editingItem.product_name || ''} onChange={e => setEditingItem({...editingItem, product_name: e.target.value})} required />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Category</label>
+                  <input type="text" className="input-field py-2" value={editingItem.category || ''} onChange={e => setEditingItem({...editingItem, category: e.target.value})} />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Quantity</label>
+                  <input type="number" className="input-field py-2" min="1" value={editingItem.quantity || 1} onChange={e => setEditingItem({...editingItem, quantity: parseInt(e.target.value)})} required />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Expiry Date</label>
+                  <input type="date" className="input-field py-2" value={editingItem.expiry_date ? editingItem.expiry_date.split('T')[0] : ''} onChange={e => setEditingItem({...editingItem, expiry_date: e.target.value})} required />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Location</label>
+                  <select className="input-field py-2" value={editingItem.storage_location || 'Refrigerator'} onChange={e => setEditingItem({...editingItem, storage_location: e.target.value})}>
+                    <option>Refrigerator</option>
+                    <option>Freezer</option>
+                    <option>Pantry</option>
+                    <option>Kitchen Shelf</option>
+                  </select>
+                </div>
+              </div>
+              <div className="pt-4 flex justify-end gap-3">
+                <button type="button" onClick={() => setEditingItem(null)} className="btn btn-outline px-6">Cancel</button>
+                <button type="submit" className="btn btn-primary px-6">Save Changes</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
