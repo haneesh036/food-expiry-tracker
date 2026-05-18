@@ -53,6 +53,10 @@ const Scanner = () => {
             handleBarcodeScanned(result.getText());
             stopScanning();
           }
+        }).catch(err => {
+          console.error("Camera start failed:", err);
+          setCameraError(true);
+          setScanning(false);
         });
       }
     } catch (err) {
@@ -244,7 +248,7 @@ const Scanner = () => {
               </div>
             ) : (
               <div className="relative w-full max-w-sm rounded-2xl overflow-hidden bg-black shadow-lg">
-                <video ref={videoRef} className="w-full h-auto"></video>
+                <video ref={videoRef} className="w-full h-auto" autoPlay playsInline muted></video>
                 <button onClick={stopScanning} className="absolute top-4 right-4 p-2 bg-black/50 text-white rounded-full hover:bg-black/70">
                   <X className="w-5 h-5" />
                 </button>
