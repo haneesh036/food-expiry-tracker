@@ -90,7 +90,7 @@ const Login = () => {
         <div className="hidden md:flex items-center gap-8 text-sm font-medium text-slate-600">
           <a href="#features" className="hover:text-[var(--color-primary)] transition-colors">Features</a>
           <a href="#how-it-works" className="hover:text-[var(--color-primary)] transition-colors">How it works</a>
-          <a href="#reviews" className="hover:text-[var(--color-primary)] transition-colors">Reviews</a>
+          
         </div>
         
         <div className="flex items-center gap-4">
