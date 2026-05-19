@@ -43,7 +43,7 @@ const Navbar = ({ toggleSidebar }) => {
               className="flex items-center gap-2 text-sm font-medium text-slate-500 hover:text-red-500 transition-colors px-4 py-2 rounded-xl hover:bg-red-50"
             >
               <LogOut className="w-4 h-4" />
-              <span className="hidden sm:block">Logout</span>
+              
             </button>
           </div>
         </div>
