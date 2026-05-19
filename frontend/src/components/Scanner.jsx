@@ -16,8 +16,11 @@ const Scanner = () => {
   const [saving, setSaving] = useState(false);
   const [cameraError, setCameraError] = useState('');
   const [facingMode, setFacingMode] = useState('environment');
+  const [ocrCameraActive, setOcrCameraActive] = useState(false);
 
   const videoRef = useRef(null);
+  const ocrVideoRef = useRef(null);
+  const ocrStreamRef = useRef(null);
   const streamRef = useRef(null);
   const readerRef = useRef(null);
   const scanningRef = useRef(false);
@@ -39,8 +42,71 @@ const Scanner = () => {
   useEffect(() => {
     return () => {
       stopScanning();
+      stopOcrCamera();
     };
   }, [stopScanning]);
+  
+  useEffect(() => {
+    stopScanning();
+    stopOcrCamera();
+  }, [activeTab, stopScanning]);
+
+  const stopOcrCamera = useCallback(() => {
+    if (ocrStreamRef.current) {
+      ocrStreamRef.current.getTracks().forEach(track => track.stop());
+      ocrStreamRef.current = null;
+    }
+    if (ocrVideoRef.current) {
+      ocrVideoRef.current.srcObject = null;
+    }
+    setOcrCameraActive(false);
+  }, []);
+
+  const startOcrCamera = async () => {
+    setCameraError('');
+    setOcrCameraActive(true);
+    await new Promise(r => setTimeout(r, 150));
+    
+    if (!ocrVideoRef.current) {
+      setCameraError('Video element not found.');
+      setOcrCameraActive(false);
+      return;
+    }
+
+    try {
+      const constraints = {
+        video: { facingMode: { ideal: facingMode }, width: { ideal: 1920 }, height: { ideal: 1080 } },
+        audio: false,
+      };
+      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      ocrStreamRef.current = stream;
+      
+      const video = ocrVideoRef.current;
+      video.srcObject = stream;
+      video.setAttribute('playsinline', 'true');
+      video.setAttribute('muted', 'true');
+      video.muted = true;
+      video.play();
+    } catch (err) {
+      setCameraError('Camera access denied or unavailable.');
+      setOcrCameraActive(false);
+    }
+  };
+
+  const captureOcrImage = () => {
+     if (!ocrVideoRef.current) return;
+     const video = ocrVideoRef.current;
+     const canvas = document.createElement('canvas');
+     canvas.width = video.videoWidth;
+     canvas.height = video.videoHeight;
+     const ctx = canvas.getContext('2d');
+     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+     
+     canvas.toBlob(async (blob) => {
+        stopOcrCamera();
+        await processOcrImage(blob);
+     }, 'image/jpeg');
+  };
 
   const startReader = useCallback(async (stream) => {
     const video = videoRef.current;
@@ -186,10 +252,13 @@ const Scanner = () => {
   const handleImageUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
+    await processOcrImage(file);
+  };
 
+  const processOcrImage = async (imageSource) => {
     setOcrLoading(true);
     try {
-      const result = await Tesseract.recognize(file, 'eng');
+      const result = await Tesseract.recognize(imageSource, 'eng');
       const rawText = result.data.text.toLowerCase();
       // Remove spaces for easier matching of dot-matrix printed dates
       const text = rawText.replace(/\s+/g, '');
@@ -426,12 +495,47 @@ const Scanner = () => {
 
         {activeTab === 'ocr' && (
           <div className="flex flex-col items-center justify-center p-6 space-y-6">
-            <div className="w-full max-w-md border-2 border-dashed border-slate-300 rounded-3xl p-12 text-center hover:bg-slate-50 transition-colors relative cursor-pointer group">
-              <input type="file" accept="image/*" onChange={handleImageUpload} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
-              <Upload className="w-12 h-12 text-slate-400 mx-auto mb-4 group-hover:text-[var(--color-primary)] transition-colors" />
-              <h3 className="text-lg font-medium text-slate-800">Upload Expiry Label</h3>
-              <p className="text-sm text-slate-500 mt-2">Drag & drop or click to select image</p>
-            </div>
+            {!ocrCameraActive ? (
+              <div className="flex flex-col items-center gap-4 w-full max-w-sm">
+                <button onClick={startOcrCamera} className="w-full flex flex-col items-center justify-center gap-4 p-10 rounded-2xl bg-[var(--color-primary-light)]/10 border-2 border-dashed border-[var(--color-primary-light)] hover:bg-[var(--color-primary-light)]/20 transition-colors text-[var(--color-primary-dark)]">
+                  <Camera className="w-12 h-12" />
+                  <span className="font-bold text-sm">Open Camera for Expiry Date</span>
+                </button>
+                
+                {cameraError && <p className="text-red-500 text-sm mb-3 font-medium bg-red-50 p-3 rounded-xl border border-red-100">{cameraError}</p>}
+                
+                <div className="relative flex py-5 items-center w-full">
+                  <div className="flex-grow border-t border-slate-200"></div>
+                  <span className="flex-shrink-0 mx-4 text-slate-400 text-sm">OR</span>
+                  <div className="flex-grow border-t border-slate-200"></div>
+                </div>
+
+                <div className="w-full border-2 border-dashed border-slate-300 rounded-3xl p-8 text-center hover:bg-slate-50 transition-colors relative cursor-pointer group">
+                  <input type="file" accept="image/*" onChange={handleImageUpload} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
+                  <Upload className="w-10 h-10 text-slate-400 mx-auto mb-3 group-hover:text-[var(--color-primary)] transition-colors" />
+                  <h3 className="text-base font-medium text-slate-800">Upload Label Image</h3>
+                </div>
+              </div>
+            ) : (
+              <div className="flex flex-col items-center gap-4 w-full">
+                <div className="relative w-full max-w-sm rounded-2xl overflow-hidden bg-black shadow-lg" style={{ aspectRatio: '3/4' }}>
+                  <video ref={ocrVideoRef} className="w-full h-full object-cover block" autoPlay playsInline muted></video>
+                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                    <div className="w-[80%] h-[20%] border-2 border-[var(--color-primary)] rounded-lg shadow-[0_0_0_9999px_rgba(0,0,0,0.5)] flex items-center justify-center">
+                       <span className="text-[var(--color-primary)] font-bold text-lg drop-shadow-md opacity-70">Center Expiry Date</span>
+                    </div>
+                  </div>
+                  <div className="absolute top-3 right-3 flex gap-2">
+                    <button onClick={stopOcrCamera} className="p-2 bg-black/60 rounded-full text-white hover:bg-black/80 transition-colors">
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+                <button onClick={captureOcrImage} className="btn btn-primary px-10 py-3 rounded-full text-lg shadow-lg hover:shadow-xl transition-shadow">
+                  Capture Date
+                </button>
+              </div>
+            )}
             
             {ocrLoading && (
               <div className="flex items-center justify-center gap-3 text-[var(--color-primary)]">
@@ -440,9 +544,11 @@ const Scanner = () => {
               </div>
             )}
 
-            <button onClick={() => setActiveTab('manual')} className="text-sm font-medium text-slate-500 hover:text-slate-800 underline">
-              Skip to manual entry
-            </button>
+            {!ocrCameraActive && !ocrLoading && (
+              <button onClick={() => setActiveTab('manual')} className="text-sm font-medium text-slate-500 hover:text-slate-800 underline">
+                Skip to manual entry
+              </button>
+            )}
           </div>
         )}
 
