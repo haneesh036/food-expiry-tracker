@@ -190,32 +190,36 @@ const Scanner = () => {
     setOcrLoading(true);
     try {
       const result = await Tesseract.recognize(file, 'eng');
-      const text = result.data.text.toLowerCase();
-      const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+      const rawText = result.data.text.toLowerCase();
+      // Remove spaces for easier matching of dot-matrix printed dates
+      const text = rawText.replace(/\s+/g, '');
+      const lines = rawText.split('\n').map(l => l.replace(/\s+/g, '')).filter(l => l.length > 0);
       
       let bestDateStr = null;
       let bestDateObj = null;
-      const keywords = ['use by', 'bb', 'best before', 'exp', 'expiry', 'e'];
-      // Match DD/MM/YYYY, DD-MM-YYYY, DD/MM/YY, DD-MM-YY, DD-MMM-YY, MM/YY, MM-YY, MMM-YY, MMM YY
-      const dateRegex = /\b(\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{2,4}|\d{1,2}[\/\-\.][a-z]{3,}[\/\-\.]\d{2,4}|\d{1,2}[\/\-\.]\d{2,4}|[a-z]{3,}[\s\-\.]\d{2,4})\b/gi;
+      
+      const keywords = ['useby', 'bb', 'bestbefore', 'exp', 'expiry', 'e'];
+      const dateRegex = /(?:\D|^)(\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{2,4}|\d{1,2}[\/\-\.]?(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[\/\-\.]?\d{2,4}|\d{1,2}[\/\-\.]\d{2,4}|(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[\-\.]?\d{2,4})(?:\D|$)/gi;
 
       const parseDateStr = (dateStr) => {
-        const cleanStr = dateStr.toLowerCase().replace(/[\/\.\s]/g, '-');
-        const parts = cleanStr.split('-');
+        const cleanStr = dateStr.toLowerCase().replace(/[\/\.]/g, '-');
+        const partsMatch = cleanStr.match(/^(\d{1,2})-?(\d{1,2})-?(\d{2,4})$/) || 
+                           cleanStr.match(/^(\d{1,2})-?([a-z]{3,})-?(\d{2,4})$/) ||
+                           cleanStr.match(/^(\d{1,2})-?(\d{2,4})$/) ||
+                           cleanStr.match(/^([a-z]{3,})-?(\d{2,4})$/);
+                           
+        if (!partsMatch) return null;
+        
         const monthMap = { jan:1, feb:2, mar:3, apr:4, may:5, jun:6, jul:7, aug:8, sep:9, oct:10, nov:11, dec:12 };
-
         let d = '1', m, y;
         
-        if (parts.length === 3) {
-          d = parts[0];
-          m = monthMap[parts[1].substring(0,3)] || parts[1];
-          y = parts[2];
-        } else if (parts.length === 2) {
-          m = monthMap[parts[0].substring(0,3)] || parts[0];
-          y = parts[1];
-        } else {
-          const parsed = new Date(dateStr);
-          return isNaN(parsed) ? null : parsed;
+        if (partsMatch.length === 4) {
+           d = partsMatch[1];
+           m = monthMap[partsMatch[2].substring(0,3)] || partsMatch[2];
+           y = partsMatch[3];
+        } else if (partsMatch.length === 3) {
+           m = monthMap[partsMatch[1].substring(0,3)] || partsMatch[1];
+           y = partsMatch[2];
         }
         
         y = parseInt(y, 10);
@@ -225,7 +229,7 @@ const Scanner = () => {
         return isNaN(parsed) ? null : parsed;
       };
       
-      const allMatches = text.match(dateRegex) || [];
+      const allMatches = [...text.matchAll(dateRegex)].map(m => m[1]);
       const validDates = [];
       
       for (const match of allMatches) {
@@ -238,7 +242,7 @@ const Scanner = () => {
       // 1. Try to find a date close to a keyword
       for (const line of lines) {
         if (keywords.some(kw => line.includes(kw))) {
-            const matchesInLine = line.match(dateRegex) || [];
+            const matchesInLine = [...line.matchAll(dateRegex)].map(m => m[1]);
             for (const m of matchesInLine) {
                 const pDate = parseDateStr(m);
                 if (pDate && pDate.getFullYear() >= 2020 && pDate.getFullYear() <= 2050) {
@@ -250,8 +254,26 @@ const Scanner = () => {
         }
         if (bestDateObj) break;
       }
+      
+      // 2. Try the next line if a keyword is found but no date
+      if (!bestDateObj) {
+        for (let i = 0; i < lines.length - 1; i++) {
+           if (keywords.some(kw => lines[i].includes(kw))) {
+               const matchesInNextLine = [...lines[i+1].matchAll(dateRegex)].map(m => m[1]);
+               for (const m of matchesInNextLine) {
+                  const pDate = parseDateStr(m);
+                  if (pDate && pDate.getFullYear() >= 2020 && pDate.getFullYear() <= 2050) {
+                      bestDateStr = m;
+                      bestDateObj = pDate;
+                      break;
+                  }
+               }
+           }
+           if (bestDateObj) break;
+        }
+      }
 
-      // 2. If no date near keyword, pick best valid date from all matches
+      // 3. Pick best valid date from all matches
       if (!bestDateObj && validDates.length > 0) {
          const futureDates = validDates.filter(d => d.date > new Date());
          if (futureDates.length > 0) {
