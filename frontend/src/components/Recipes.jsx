@@ -32,7 +32,7 @@ const Recipes = () => {
 
       setItems(expiringItems);
 
-      // Extract unique single-word ingredients (naive approach for TheMealDB)
+      // Extract unique single-word ingredients
       const ingredients = [...new Set(expiringItems.map(i => {
         return i.product_name.split(' ')[0].toLowerCase();
       }))];
@@ -40,50 +40,66 @@ const Recipes = () => {
       let foundRecipes = [];
 
       if (ingredients.length > 0) {
-        // Fetch recipes for the first few ingredients
-        const recipePromises = ingredients.slice(0, 4).map(ing => 
-          axios.get(`https://www.themealdb.com/api/json/v1/1/filter.php?i=${ing}`).catch(() => null)
-        );
-        
-        const recipeResponses = await Promise.all(recipePromises);
-        
-        recipeResponses.forEach(res => {
-          if (res && res.data && res.data.meals) {
-            foundRecipes = [...foundRecipes, ...res.data.meals];
+        // Try searching with up to 3 combined ingredients
+        const query = ingredients.slice(0, 3).join(',');
+        try {
+          const edamamRes = await axios.get(`https://api.edamam.com/api/recipes/v2?type=public&q=${query}&app_id=900da95e&app_key=40698503668e0bb3897581f4766d77f9`);
+          if (edamamRes.data && edamamRes.data.hits) {
+             foundRecipes = edamamRes.data.hits.map((hit, index) => ({
+                id: `edamam-${index}`,
+                title: hit.recipe.label,
+                image: hit.recipe.image,
+                url: hit.recipe.url
+             }));
           }
-        });
+        } catch (e) {
+          console.error("Edamam API failed", e);
+        }
+        
+        // If combined search fails, try just the first ingredient
+        if (foundRecipes.length === 0) {
+           try {
+             const fallbackRes = await axios.get(`https://api.edamam.com/api/recipes/v2?type=public&q=${ingredients[0]}&app_id=900da95e&app_key=40698503668e0bb3897581f4766d77f9`);
+             if (fallbackRes.data && fallbackRes.data.hits) {
+                foundRecipes = fallbackRes.data.hits.map((hit, index) => ({
+                   id: `edamam-fb-${index}`,
+                   title: hit.recipe.label,
+                   image: hit.recipe.image,
+                   url: hit.recipe.url
+                }));
+             }
+           } catch (e) {}
+        }
       }
       
-      // If no recipes found from TheMealDB, generate universal AI fallback recipes!
+      // If still no recipes found, generate universal AI fallback recipes!
       if (foundRecipes.length === 0 && expiringItems.length > 0) {
         const mainItem = expiringItems[0]?.product_name || 'Veggies';
         const secondItem = expiringItems.length > 1 ? expiringItems[1]?.product_name : 'Fresh Ingredients';
         
         foundRecipes = [
           {
-            idMeal: 'ai-1',
-            strMeal: `FreshTrack Signature Stir Fry with ${mainItem}`,
-            strMealThumb: 'https://images.unsplash.com/photo-1512058564366-18510be2db19?auto=format&fit=crop&w=800&q=80',
-            sourceUrl: '#'
+            id: 'ai-1',
+            title: `FreshTrack Signature Stir Fry with ${mainItem}`,
+            image: 'https://images.unsplash.com/photo-1512058564366-18510be2db19?auto=format&fit=crop&w=800&q=80',
+            url: 'https://www.simplyrecipes.com/recipes/how_to_stir_fry/'
           },
           {
-            idMeal: 'ai-2',
-            strMeal: `Zero-Waste Kitchen Sink Bowl featuring ${secondItem}`,
-            strMealThumb: 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=800&q=80',
-            sourceUrl: '#'
+            id: 'ai-2',
+            title: `Zero-Waste Kitchen Sink Bowl featuring ${secondItem}`,
+            image: 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=800&q=80',
+            url: 'https://tasty.co/recipe/kitchen-sink-bowl'
           },
           {
-            idMeal: 'ai-3',
-            strMeal: `Everything Roasted Pan`,
-            strMealThumb: 'https://images.unsplash.com/photo-1490645935967-10de6ba17061?auto=format&fit=crop&w=800&q=80',
-            sourceUrl: '#'
+            id: 'ai-3',
+            title: `Everything Roasted Pan`,
+            image: 'https://images.unsplash.com/photo-1490645935967-10de6ba17061?auto=format&fit=crop&w=800&q=80',
+            url: 'https://www.delish.com/cooking/recipe-ideas/a25240121/roasted-vegetables-recipe/'
           }
         ];
       }
         
-      // Remove duplicates
-      const uniqueRecipes = Array.from(new Map(foundRecipes.map(r => [r.idMeal, r])).values());
-      setRecipes(uniqueRecipes.slice(0, 9)); // Show max 9
+      setRecipes(foundRecipes.slice(0, 9)); // Show max 9
     } catch (err) {
       console.error(err);
     } finally {
@@ -136,20 +152,20 @@ const Recipes = () => {
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                   {recipes.map(recipe => (
-                    <div key={recipe.idMeal} className="card p-0 overflow-hidden flex flex-col group">
+                    <div key={recipe.id} className="card p-0 overflow-hidden flex flex-col group">
                       <div className="relative h-48 overflow-hidden">
                         <img 
-                          src={recipe.strMealThumb} 
-                          alt={recipe.strMeal} 
+                          src={recipe.image} 
+                          alt={recipe.title} 
                           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                         />
                         <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent"></div>
                       </div>
                       <div className="p-5 flex-1 flex flex-col">
-                        <h3 className="font-bold text-lg text-slate-800 mb-2 line-clamp-2">{recipe.strMeal}</h3>
+                        <h3 className="font-bold text-lg text-slate-800 mb-2 line-clamp-2">{recipe.title}</h3>
                         <div className="mt-auto pt-4">
                           <a 
-                            href={`https://www.themealdb.com/meal/${recipe.idMeal}`} 
+                            href={recipe.url} 
                             target="_blank" 
                             rel="noopener noreferrer"
                             className="flex items-center justify-center gap-2 w-full btn border border-slate-200 text-slate-600 hover:bg-slate-50 transition-colors"
