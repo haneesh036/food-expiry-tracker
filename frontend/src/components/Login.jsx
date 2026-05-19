@@ -123,7 +123,7 @@ const Login = () => {
           </Link>
           <div className="flex items-center gap-2 text-sm text-slate-500 font-medium">
             <CheckCircle2 className="w-4 h-4 text-[var(--color-primary)]" />
-            No credit card &middot; Free forever plan
+            
           </div>
         </div>
       </section>
