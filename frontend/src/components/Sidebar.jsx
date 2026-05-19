@@ -8,7 +8,7 @@ const Sidebar = ({ isOpen, onClose, handleLogout }) => {
 
   const navLinks = [
     { name: 'Dashboard', path: '/', icon: LayoutDashboard },
-    { name: 'Fridge', path: '/inventory', icon: PackageSearch },
+    { name: 'Inventory', path: '/inventory', icon: PackageSearch },
     { name: 'Expired Items', path: '/expired', icon: AlertTriangle },
     { name: 'Recipes', path: '/recipes', icon: ChefHat },
     { name: 'Scanner', path: '/scanner', icon: ScanBarcode },
