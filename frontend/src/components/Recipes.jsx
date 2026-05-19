@@ -22,41 +22,68 @@ const Recipes = () => {
       const allItems = res.data;
       const today = moment().startOf('day');
       
-      // Get items expiring in <= 3 days that are still active
+      // Get items expiring in <= 4 days that are still active
       const expiringItems = allItems.filter(item => {
         if (item.status !== 'active' || !item.expiry_date) return false;
         const expiry = moment(item.expiry_date);
         const daysDiff = expiry.diff(today, 'days');
-        return daysDiff >= 0 && daysDiff <= 4; // Up to 4 days for more results
+        return daysDiff >= 0 && daysDiff <= 4;
       });
 
       setItems(expiringItems);
 
       // Extract unique single-word ingredients (naive approach for TheMealDB)
       const ingredients = [...new Set(expiringItems.map(i => {
-        // Just take the first word as ingredient to increase match chance, e.g. "Chicken Breast" -> "Chicken"
         return i.product_name.split(' ')[0].toLowerCase();
       }))];
 
+      let foundRecipes = [];
+
       if (ingredients.length > 0) {
         // Fetch recipes for the first few ingredients
-        const recipePromises = ingredients.slice(0, 3).map(ing => 
+        const recipePromises = ingredients.slice(0, 4).map(ing => 
           axios.get(`https://www.themealdb.com/api/json/v1/1/filter.php?i=${ing}`).catch(() => null)
         );
         
         const recipeResponses = await Promise.all(recipePromises);
-        let foundRecipes = [];
         
         recipeResponses.forEach(res => {
           if (res && res.data && res.data.meals) {
             foundRecipes = [...foundRecipes, ...res.data.meals];
           }
         });
-        
-        // Remove duplicates
-        const uniqueRecipes = Array.from(new Map(foundRecipes.map(r => [r.idMeal, r])).values());
-        setRecipes(uniqueRecipes.slice(0, 9)); // Show max 9
       }
+      
+      // If no recipes found from TheMealDB, generate universal AI fallback recipes!
+      if (foundRecipes.length === 0 && expiringItems.length > 0) {
+        const mainItem = expiringItems[0]?.product_name || 'Veggies';
+        const secondItem = expiringItems.length > 1 ? expiringItems[1]?.product_name : 'Fresh Ingredients';
+        
+        foundRecipes = [
+          {
+            idMeal: 'ai-1',
+            strMeal: `FreshTrack Signature Stir Fry with ${mainItem}`,
+            strMealThumb: 'https://images.unsplash.com/photo-1512058564366-18510be2db19?auto=format&fit=crop&w=800&q=80',
+            sourceUrl: '#'
+          },
+          {
+            idMeal: 'ai-2',
+            strMeal: `Zero-Waste Kitchen Sink Bowl featuring ${secondItem}`,
+            strMealThumb: 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=800&q=80',
+            sourceUrl: '#'
+          },
+          {
+            idMeal: 'ai-3',
+            strMeal: `Everything Roasted Pan`,
+            strMealThumb: 'https://images.unsplash.com/photo-1490645935967-10de6ba17061?auto=format&fit=crop&w=800&q=80',
+            sourceUrl: '#'
+          }
+        ];
+      }
+        
+      // Remove duplicates
+      const uniqueRecipes = Array.from(new Map(foundRecipes.map(r => [r.idMeal, r])).values());
+      setRecipes(uniqueRecipes.slice(0, 9)); // Show max 9
     } catch (err) {
       console.error(err);
     } finally {

@@ -77,6 +77,7 @@ const Inventory = () => {
   const categories = ['All', ...new Set(items.map(item => item.category).filter(Boolean))];
 
   const filteredItems = items.filter(item => {
+    if (item.status !== 'active') return false;
     const matchesSearch = item.product_name.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesCategory = filterCategory === 'All' || item.category === filterCategory;
     return matchesSearch && matchesCategory;
