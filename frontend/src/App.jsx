@@ -9,6 +9,7 @@ import Inventory from './components/Inventory';
 import Scanner from './components/Scanner';
 import Recipes from './components/Recipes';
 import Expired from './components/Expired';
+import Profile from './components/Profile';
 
 const PrivateRoute = ({ children }) => {
   const token = localStorage.getItem('token');
@@ -87,6 +88,14 @@ function App() {
           <PrivateRoute>
             <AppLayout>
               <Expired />
+            </AppLayout>
+          </PrivateRoute>
+        } />
+        
+        <Route path="/profile" element={
+          <PrivateRoute>
+            <AppLayout>
+              <Profile />
             </AppLayout>
           </PrivateRoute>
         } />

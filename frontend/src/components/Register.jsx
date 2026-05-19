@@ -31,7 +31,7 @@ const Register = () => {
             <Leaf className="w-8 h-8 text-[var(--color-primary-dark)]" />
           </div>
           <h1 className="text-2xl font-bold text-slate-800">Create Account</h1>
-          <p className="text-slate-500 text-sm">Join Smart Food Expiry Tracker</p>
+          <p className="text-slate-500 text-sm">Join FreshTrack</p>
         </div>
 
         {error && <div className="bg-red-50 text-red-600 p-3 rounded-xl mb-4 text-sm text-center">{error}</div>}

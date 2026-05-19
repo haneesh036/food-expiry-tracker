@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { LayoutDashboard, PackageSearch, ScanBarcode, ChefHat, AlertTriangle, X, LogOut } from 'lucide-react';
+import { LayoutDashboard, PackageSearch, ScanBarcode, ChefHat, AlertTriangle, X, LogOut, User } from 'lucide-react';
 import { cn } from './Navbar';
 
 const Sidebar = ({ isOpen, onClose, handleLogout }) => {
@@ -12,6 +12,7 @@ const Sidebar = ({ isOpen, onClose, handleLogout }) => {
     { name: 'Expired Items', path: '/expired', icon: AlertTriangle },
     { name: 'Recipes', path: '/recipes', icon: ChefHat },
     { name: 'Scanner', path: '/scanner', icon: ScanBarcode },
+    { name: 'Profile', path: '/profile', icon: User },
   ];
 
   return (
@@ -33,7 +34,7 @@ const Sidebar = ({ isOpen, onClose, handleLogout }) => {
       >
         <div className="w-72 flex flex-col h-full min-w-[18rem]">
           <div className="flex items-center justify-between p-6 border-b border-slate-50">
-            <h2 className="text-xl font-bold text-slate-800 tracking-tight">EcoTrack</h2>
+            <h2 className="text-xl font-bold text-slate-800 tracking-tight">FreshTrack</h2>
             <button 
               onClick={onClose}
               className="p-2 rounded-xl text-slate-400 hover:bg-slate-50 hover:text-slate-600 transition-colors lg:hidden"
