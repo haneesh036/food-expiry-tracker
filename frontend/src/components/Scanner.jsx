@@ -194,78 +194,82 @@ const Scanner = () => {
       const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
       
       let bestDateStr = null;
-      const keywords = ['use by', 'bb', 'best before', 'exp', 'expiry'];
-      const dateRegex = /\b(\d{1,2}[\/\-\.][a-z]{3}[\/\-\.]\d{2,4}|\d{1,2}[\/\-\.]\d{1,2}([\/\-\.]\d{2,4})?|\d{4}[\/\-\.]\d{1,2}[\/\-\.]\d{1,2}|[a-z]{3}\s\d{2,4})\b/i;
+      let bestDateObj = null;
+      const keywords = ['use by', 'bb', 'best before', 'exp', 'expiry', 'e'];
+      // Match DD/MM/YYYY, DD-MM-YYYY, DD/MM/YY, DD-MM-YY, DD-MMM-YY, MM/YY, MM-YY, MMM-YY, MMM YY
+      const dateRegex = /\b(\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{2,4}|\d{1,2}[\/\-\.][a-z]{3,}[\/\-\.]\d{2,4}|\d{1,2}[\/\-\.]\d{2,4}|[a-z]{3,}[\s\-\.]\d{2,4})\b/gi;
 
-      // 1. Try to find a line with a keyword AND a date
-      for (const line of lines) {
-        if (keywords.some(kw => line.includes(kw))) {
-          const match = line.match(dateRegex);
-          if (match) {
-            bestDateStr = match[0];
-            break;
-          }
-        }
-      }
-
-      // 2. If not found, look for keyword, then check next line for date
-      if (!bestDateStr) {
-        for (let i = 0; i < lines.length; i++) {
-          if (keywords.some(kw => lines[i].includes(kw))) {
-            const match = lines[i+1]?.match(dateRegex);
-            if (match) {
-              bestDateStr = match[0];
-              break;
-            }
-          }
-        }
-      }
-
-      // 3. Fallback: just find any date in the whole text
-      if (!bestDateStr) {
-        const match = text.match(dateRegex);
-        if (match) bestDateStr = match[0];
-      }
-      
-      if (bestDateStr) {
-        let parsed = new Date();
-        const cleanStr = bestDateStr.replace(/[\/\.]/g, '-');
+      const parseDateStr = (dateStr) => {
+        const cleanStr = dateStr.toLowerCase().replace(/[\/\.\s]/g, '-');
         const parts = cleanStr.split('-');
         const monthMap = { jan:1, feb:2, mar:3, apr:4, may:5, jun:6, jul:7, aug:8, sep:9, oct:10, nov:11, dec:12 };
 
+        let d = '1', m, y;
+        
         if (parts.length === 3) {
-          let d = parts[0];
-          let m = parts[1].toLowerCase();
-          let y = parts[2];
-          
-          if (monthMap[m]) m = monthMap[m];
-          
-          if (d.length === 4) {
-            // YYYY-MM-DD
-            parsed = new Date(`${d}-${m}-${y}`);
-          } else {
-            // DD-MM-YY or DD-MM-YYYY
-            if (y.length === 2) y = `20${y}`;
-            parsed = new Date(`${y}-${m}-${d}`);
-          }
+          d = parts[0];
+          m = monthMap[parts[1].substring(0,3)] || parts[1];
+          y = parts[2];
         } else if (parts.length === 2) {
-          // MM-YY or MM-YYYY
-          let m = parts[0].toLowerCase();
-          let y = parts[1];
-          if (monthMap[m]) m = monthMap[m];
-          if (y.length === 2) y = `20${y}`;
-          parsed = new Date(`${y}-${m}-01`);
+          m = monthMap[parts[0].substring(0,3)] || parts[0];
+          y = parts[1];
         } else {
-           parsed = new Date(cleanStr);
+          const parsed = new Date(dateStr);
+          return isNaN(parsed) ? null : parsed;
         }
+        
+        y = parseInt(y, 10);
+        if (y < 100) y += 2000;
+        
+        const parsed = new Date(y, parseInt(m, 10) - 1, parseInt(d, 10));
+        return isNaN(parsed) ? null : parsed;
+      };
+      
+      const allMatches = text.match(dateRegex) || [];
+      const validDates = [];
+      
+      for (const match of allMatches) {
+        const pDate = parseDateStr(match);
+        if (pDate && pDate.getFullYear() >= 2020 && pDate.getFullYear() <= 2050) {
+            validDates.push({ str: match, date: pDate });
+        }
+      }
 
-        if (!isNaN(parsed) && parsed.getFullYear() > 2000) {
-          const isoDate = parsed.toISOString().split('T')[0];
-          setFormData(prev => ({ ...prev, expiry_date: isoDate }));
-          alert(`Detected date: ${isoDate} (from "${bestDateStr}")`);
-        } else {
-          alert(`Found "${bestDateStr}" but could not parse it as a valid date. Please verify manually.`);
+      // 1. Try to find a date close to a keyword
+      for (const line of lines) {
+        if (keywords.some(kw => line.includes(kw))) {
+            const matchesInLine = line.match(dateRegex) || [];
+            for (const m of matchesInLine) {
+                const pDate = parseDateStr(m);
+                if (pDate && pDate.getFullYear() >= 2020 && pDate.getFullYear() <= 2050) {
+                    bestDateStr = m;
+                    bestDateObj = pDate;
+                    break;
+                }
+            }
         }
+        if (bestDateObj) break;
+      }
+
+      // 2. If no date near keyword, pick best valid date from all matches
+      if (!bestDateObj && validDates.length > 0) {
+         const futureDates = validDates.filter(d => d.date > new Date());
+         if (futureDates.length > 0) {
+            bestDateObj = futureDates[0].date;
+            bestDateStr = futureDates[0].str;
+         } else {
+            bestDateObj = validDates[0].date;
+            bestDateStr = validDates[0].str;
+         }
+      }
+
+      if (bestDateObj) {
+        const yyyy = bestDateObj.getFullYear();
+        const mm = String(bestDateObj.getMonth() + 1).padStart(2, '0');
+        const dd = String(bestDateObj.getDate()).padStart(2, '0');
+        const isoDate = `${yyyy}-${mm}-${dd}`;
+        setFormData(prev => ({ ...prev, expiry_date: isoDate }));
+        alert(`Detected date: ${isoDate} (from "${bestDateStr}")`);
       } else {
         alert('No expiry date detected clearly. Please enter manually.');
       }
