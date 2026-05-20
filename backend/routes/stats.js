@@ -1,10 +1,10 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../db');
+const auth = require('../middleware/auth');
 
-router.get('/', (req, res) => {
-  const userId = req.query.user_id;
-  if (!userId) return res.status(400).json({ message: 'user_id is required' });
+router.get('/', auth, (req, res) => {
+  const userId = req.user.id;
 
   // Simple stats for dashboard
   const today = new Date().toISOString().split('T')[0];
